@@ -15,20 +15,21 @@
  *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  *  See the License for the specific language governing permissions and
  *  limitations under the License.
+ *
+ *
+ * Modifications Copyright 2020 Codersparks
  */
 
 package io.theves.denon4j;
 
 import io.theves.denon4j.controls.*;
-import io.theves.denon4j.logging.LoggingSystem;
-import io.theves.denon4j.net.*;
 import io.theves.denon4j.net.EventListener;
+import io.theves.denon4j.net.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
-import java.net.InetAddress;
+import java.lang.invoke.MethodHandles;
 import java.util.*;
-import java.util.logging.Level;
-import java.util.logging.Logger;
-import java.util.stream.Collectors;
 
 import static java.lang.String.format;
 
@@ -40,7 +41,8 @@ import static java.lang.String.format;
 public class DenonReceiver implements AutoCloseable, EventDispatcher {
     private static final long RECV_TIMEOUT = 10 * 1000L;
 
-    private final Logger log = Logger.getLogger(DenonReceiver.class.getName());
+    private static final Logger logger = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass());
+
     private final Object sendReceiveLock = new Object();
     private final List<EventListener> eventListeners;
     private final Protocol protocol;
@@ -73,26 +75,8 @@ public class DenonReceiver implements AutoCloseable, EventDispatcher {
     private Slider tunerPreset;
     private Setting tunerMode;
 
-    /**
-     * Starts auto discovery and chooses first receiver found.
-     * Takes some time from time to time, so pls be patient.
-     */
-    public DenonReceiver(String subnet) {
-        this(autoDiscover(subnet).getHostAddress(), 23);
-    }
-
     public DenonReceiver(String host, int port) {
         this(Protocol.tcp(host, port));
-    }
-
-    private static InetAddress autoDiscover(String subnet) {
-        AutoDiscovery autoDiscovery = new AutoDiscovery();
-        autoDiscovery.setSubnet(subnet);
-        Collection<InetAddress> discovered = autoDiscovery.discover(1);
-        if (discovered.isEmpty()) {
-            throw new ConnectionException("No receivers found");
-        }
-        return discovered.iterator().next();
     }
 
     public DenonReceiver(Protocol protocol) {
@@ -103,7 +87,6 @@ public class DenonReceiver implements AutoCloseable, EventDispatcher {
 
         createControls(this.controls);
         addToDispatcher(this.controls);
-        initLogging();
     }
 
     private void createControls(Collection<AbstractControl> controls) {
@@ -286,10 +269,6 @@ public class DenonReceiver implements AutoCloseable, EventDispatcher {
         controls.forEach(this::addListener);
     }
 
-    private void initLogging() {
-        new LoggingSystem().initialize();
-    }
-
     public Volume frontLeftVolume() {
         return frontLeftVolume;
     }
@@ -409,7 +388,7 @@ public class DenonReceiver implements AutoCloseable, EventDispatcher {
                 try {
                     listener.received(event);
                 } catch (Exception e) {
-                    log.log(Level.SEVERE, "Caught exception from listener: " + listener, e);
+                    logger.error("Caught exception from listener: " + listener, e);
                 }
             });
         }
@@ -482,14 +461,14 @@ public class DenonReceiver implements AutoCloseable, EventDispatcher {
                 try {
                     sendReceiveLock.wait(RECV_TIMEOUT);
                 } catch (InterruptedException e) {
-                    log.log(Level.FINEST, "Interrupted while waiting for response", e);
+                    logger.trace("Interrupted while waiting for response", e);
                 }
 
                 // copy result
                 return new ArrayList<>(currentContext.received());
             } finally {
                 currentContext.endReceive();
-                log.log(Level.FINE, "Send/Recv took: " + currentContext.duration().toString());
+                logger.debug("Send/Recv took: {}", currentContext.duration().toString());
             }
         }
     }
